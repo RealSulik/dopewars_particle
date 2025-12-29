@@ -1,0 +1,97 @@
+/* Blade Runner Theme 🌧🔥
+   Dirty neon orange + industrial metal shadows
+*/
+
+:root {
+  /* Button gradient */
+  --btn-start: #ff8c00;
+  --btn-end: #ff4500;
+
+  /* Glows & accents */
+  --glow-1: #ff4500;
+  --glow-2: #b34100;
+
+  /* Neon edges */
+  --edge-1: rgba(255, 95, 0, 0.35);
+  --edge-2: rgba(255, 50, 0, 0.25);
+
+  /* Panel overlays */
+  --panel-overlay: rgba(30, 15, 5, 0.55);
+  --panel-shade: rgba(15, 8, 3, 0.85);
+
+  /* Event glow */
+  --event-win: #ff7600;
+  --event-loss: #ff4500;
+  --event-neutral: #ff6100;
+}
+
+/* ==== Buttons ==== */
+
+.neon-button {
+  background: linear-gradient(90deg, var(--btn-start), var(--btn-end));
+  box-shadow:
+    0 0 6px var(--glow-2),
+    inset 0 0 6px var(--glow-1);
+}
+
+/* Buy / Sell variants */
+
+.neon-button--buy {
+  background: linear-gradient(90deg, #c46b00, #ff8c00);
+  box-shadow:
+    0 0 6px #ff4500,
+    inset 0 0 6px #c46b00;
+}
+
+.neon-button--sell {
+  background: linear-gradient(90deg, #ff4500, #b30000);
+  box-shadow:
+    0 0 6px #b30000,
+    inset 0 0 6px #ff4500;
+}
+
+.neon-button--disabled {
+  background: linear-gradient(90deg, #3f3f3f, #2f2f2f);
+  box-shadow: none;
+}
+
+/* ==== Back panels ==== */
+
+.backpanel {
+  background: var(--panel-overlay);
+  border: 1px solid var(--edge-1);
+}
+
+.cyber-card {
+  background: var(--panel-shade);
+  border-color: var(--edge-1);
+}
+
+/* ==== Event panels ==== */
+
+.event-panel--win {
+  box-shadow: 0 0 18px var(--event-win);
+}
+
+.event-panel--loss {
+  box-shadow: 0 0 18px var(--event-loss);
+}
+
+.event-panel--neutral {
+  box-shadow: 0 0 18px var(--event-neutral);
+}
+
+/* Glow edges */
+.cyber-trace {
+  border-color: var(--edge-1) !important;
+}
+
+/* Popups also tinted */
+.event-popup {
+  background-color: var(--panel-shade) !important;
+}
+
+/* Optional grungier scanlines */
+.cyber-scanlines {
+  opacity: 0.95;
+}
