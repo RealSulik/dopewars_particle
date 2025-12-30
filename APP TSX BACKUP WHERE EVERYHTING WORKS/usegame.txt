@@ -35,6 +35,7 @@ export function useGame() {
     try {
       const p = await readContract.getPlayer(address);
 
+      // If player hasn't joined or restarted cleanly
       if (Number(p.netWorthGoal) === 0) {
         setPlayerData(null);
         setInventory([]);
@@ -88,7 +89,7 @@ export function useGame() {
       }
     } catch (err) {
       console.warn("Partial refresh failure — will retry via fallback", err);
-      // Keep last known good state
+      // Do not clear state — keep last known good data
     }
   }
 
@@ -161,7 +162,7 @@ export function useGame() {
       setLoading(false);
       setCurrentAction(null);
 
-      // Fallback refresh — ensures UI never stays stale
+      // Fallback refresh — ensures UI updates even if main refresh failed
       setTimeout(() => {
         if (wallet && readContract) {
           refreshGameState(wallet);
