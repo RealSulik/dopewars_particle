@@ -26,7 +26,7 @@ export function useGame() {
   function showError(text: string) {
     console.error("🚨 Game error:", text);
     setErrorMessage(text);
-    setTimeout(() => setErrorMessage(null), 6000);
+    setTimeout(() => setErrorMessage(null), 8000);
   }
 
   async function refreshGameState(address: string) {
@@ -34,6 +34,8 @@ export function useGame() {
 
     try {
       const p = await readContract.getPlayer(address);
+
+      // If player hasn't joined or restarted cleanly
       if (Number(p.netWorthGoal) === 0) {
         setPlayerData(null);
         setInventory([]);
@@ -61,25 +63,40 @@ export function useGame() {
       const priceArr: number[] = [];
 
       for (let i = 0; i < 4; i++) {
-        const px = await readContract.s_currentPrices(i);
-        priceArr.push(Number(px));
-        invArr.push({ name: drugNames[i], amount: Number(inv[i]), price: Number(px) });
+        try {
+          const px = await readContract.s_currentPrices(i);
+          priceArr.push(Number(px));
+          invArr.push({ name: drugNames[i], amount: Number(inv[i]), price: Number(px) });
+        } catch {
+          priceArr.push(0);
+          invArr.push({ name: drugNames[i], amount: Number(inv[i]), price: 0 });
+        }
       }
 
       setInventory(invArr);
       setPrices(priceArr);
-      setIce(Number(await readContract.s_totalIce(address)));
-      setLastDailyClaim(Number(await readContract.s_lastDailyIceClaim(address)));
+
+      try {
+        setIce(Number(await readContract.s_totalIce(address)));
+      } catch {
+        // silent
+      }
+
+      try {
+        setLastDailyClaim(Number(await readContract.s_lastDailyIceClaim(address)));
+      } catch {
+        // silent
+      }
     } catch (err) {
-      // silent — prices/ice may revert, but player data is loaded
+      console.warn("Partial refresh failure — will retry via fallback", err);
+      // Do not clear state — keep last known good data
     }
   }
 
   async function connectWallet(particleProvider: any) {
     if (!particleProvider) return;
 
-    // Prevent double call in StrictMode
-    if (wallet || loading) return;
+    if (wallet || loading) return; // Prevent double init
 
     try {
       setLoading(true);
@@ -109,7 +126,7 @@ export function useGame() {
     }
   }
 
-  // Fallback refresh on mount if wallet exists
+  // Initial refresh when wallet becomes available
   useEffect(() => {
     if (wallet && readContract) {
       refreshGameState(wallet);
@@ -117,7 +134,10 @@ export function useGame() {
   }, [wallet, readContract]);
 
   async function sendTx(label: string, fnName: string, args: any[] = []) {
-    if (!aaSigner || !wallet) return showError("Wallet not ready");
+    if (!aaSigner || !wallet) {
+      showError("Wallet not connected");
+      return;
+    }
 
     setCurrentAction(label);
     setLoading(true);
@@ -127,12 +147,27 @@ export function useGame() {
       const tx = await contract[fnName](...args);
       await tx.wait();
 
+      // Primary refresh
       await refreshGameState(wallet);
     } catch (err: any) {
-      showError(err.reason || err.message || "Transaction failed");
+      let message = "Transaction failed";
+
+      if (err.reason) message = err.reason;
+      else if (err.message) message = err.message;
+      else if (err.data) message = "Reverted (no reason given)";
+
+      showError(message);
+      console.error("Tx error:", err);
     } finally {
       setLoading(false);
       setCurrentAction(null);
+
+      // Fallback refresh — ensures UI updates even if main refresh failed
+      setTimeout(() => {
+        if (wallet && readContract) {
+          refreshGameState(wallet);
+        }
+      }, 2500);
     }
   }
 
