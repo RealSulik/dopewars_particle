@@ -1,5 +1,5 @@
 // src/hooks/useGame.ts
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { SmartAccount, AAWrapProvider, SendTransactionMode } from "@particle-network/aa";
 import { createSmartAccount } from "../smartAccount";
@@ -29,26 +29,12 @@ export function useGame() {
     setTimeout(() => setErrorMessage(null), 6000);
   }
 
-  function fixEventText(str: string) {
-    if (!str) return "";
-    return str.replace(/ETH/g, "USD").replace(/Eth/g, "USD");
-  }
-
   async function refreshGameState(address: string) {
-    console.log("🔄 RefreshGameState called with address:", address);
-
-    if (!readContract || !address) {
-      console.log("⚠️ Skip refresh: missing readContract or address");
-      return;
-    }
+    if (!readContract || !address) return;
 
     try {
-      console.log("Querying on-chain player data...");
       const p = await readContract.getPlayer(address);
-      console.log("Raw player data:", p);
-
       if (Number(p.netWorthGoal) === 0) {
-        console.log("No player found — show JOIN GAME screen");
         setPlayerData(null);
         setInventory([]);
         setPrices([]);
@@ -57,13 +43,12 @@ export function useGame() {
         return;
       }
 
-      console.log("Player found — loading in-game state");
       setPlayerData({
         cash: Number(p.cash),
         location: Number(p.location),
         netWorthGoal: Number(p.netWorthGoal),
         daysPlayed: Number(p.daysPlayed),
-        lastEventDescription: fixEventText(p.lastEventDescription),
+        lastEventDescription: p.lastEventDescription || "",
         hasFinished: p.hasFinished,
         didWin: p.didWin,
         finalNetWorth: Number(p.finalNetWorth),
@@ -85,87 +70,65 @@ export function useGame() {
       setPrices(priceArr);
       setIce(Number(await readContract.s_totalIce(address)));
       setLastDailyClaim(Number(await readContract.s_lastDailyIceClaim(address)));
-
-      console.log("✅ In-game state loaded successfully");
-    } catch (err: any) {
-      console.error("On-chain refresh error:", err);
-      showError("Failed to load game state");
+    } catch (err) {
+      // silent — prices/ice may revert, but player data is loaded
     }
   }
 
   async function connectWallet(particleProvider: any) {
-    console.log("🔑 connectWallet called — provider exists:", !!particleProvider);
+    if (!particleProvider) return;
 
-    if (!particleProvider) {
-      showError("No provider from Particle");
-      return;
-    }
-
-    if (wallet) {
-      console.log("Wallet already connected — skipping");
-      return;
-    }
+    // Prevent double call in StrictMode
+    if (wallet || loading) return;
 
     try {
       setLoading(true);
-      console.log("Creating SmartAccount...");
 
       const sa = await createSmartAccount(particleProvider);
-      console.log("SmartAccount created");
-
       const address = await sa.getAddress();
-      console.log("Smart wallet address:", address);
 
       const aaProvider = new ethers.BrowserProvider(
         new AAWrapProvider(sa, SendTransactionMode.Gasless)
       );
       const signer = await aaProvider.getSigner();
-      console.log("AA Signer ready");
 
-      // SET READ CONTRACT FIRST — CRITICAL FIX
       const rpcProvider = new ethers.JsonRpcProvider("https://mainnet.base.org");
       const read = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, rpcProvider);
       setReadContract(read);
-      console.log("Read contract initialized");
 
       setSmartAccount(sa);
       setWallet(address);
       setAaSigner(signer);
 
-      console.log("Smart wallet fully initialized");
-
-      // Now refresh — readContract is ready
       await refreshGameState(address);
     } catch (err: any) {
-      console.error("connectWallet failed:", err);
-      showError(err.message || "Smart wallet init failed");
-      setWallet(null); // allow retry on failure
+      console.error("connectWallet error:", err);
+      showError(err.message || "Connection failed");
     } finally {
       setLoading(false);
     }
   }
 
-  async function sendTx(label: string, fnName: string, args: any[] = []) {
-    if (!aaSigner || !wallet) {
-      showError("Wallet not ready");
-      return;
+  // Fallback refresh on mount if wallet exists
+  useEffect(() => {
+    if (wallet && readContract) {
+      refreshGameState(wallet);
     }
+  }, [wallet, readContract]);
 
-    console.log(`🚀 Sending ${label} - ${fnName}`);
+  async function sendTx(label: string, fnName: string, args: any[] = []) {
+    if (!aaSigner || !wallet) return showError("Wallet not ready");
+
     setCurrentAction(label);
     setLoading(true);
 
     try {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, aaSigner);
       const tx = await contract[fnName](...args);
-      console.log("Tx submitted:", tx.hash);
-
-      const receipt = await tx.wait();
-      console.log("Tx confirmed:", receipt.transactionHash);
+      await tx.wait();
 
       await refreshGameState(wallet);
     } catch (err: any) {
-      console.error("Tx failed:", err);
       showError(err.reason || err.message || "Transaction failed");
     } finally {
       setLoading(false);
@@ -174,7 +137,6 @@ export function useGame() {
   }
 
   function disconnectWallet() {
-    console.log("Disconnecting wallet");
     setWallet(null);
     setSmartAccount(null);
     setAaSigner(null);
