@@ -60,18 +60,18 @@ export default function App() {
   const [showPopup, setShowPopup] = useState(false);
   const [popupImage, setPopupImage] = useState("");
   const [popupText, setPopupText] = useState("");
-  const [quantities, setQuantities] = useState<number[]>([1, 1, 1, 1]);
+  const [quantities, setQuantities] = useState<number[]>(() => [1, 1, 1, 1]);
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
 
-  // Auto-initialize smart wallet after Particle login
+  // Auto-init smart wallet after Particle login
   useEffect(() => {
     if (connected && provider && !wallet) {
       connectWallet(provider);
     }
   }, [connected, provider, wallet, connectWallet]);
 
-  // Event popup logic
+  // Event popup logic (unchanged)
   useEffect(() => {
     const event = playerData?.lastEventDescription;
     if (!event) return;
@@ -79,7 +79,6 @@ export default function App() {
     const seenKey = "lastEventSeen";
     const lastSeen = localStorage.getItem(seenKey);
     if (lastSeen === event) return;
-
     localStorage.setItem(seenKey, event);
 
     const ev = event.toLowerCase();
@@ -120,245 +119,288 @@ export default function App() {
     ? "event-panel--loss"
     : lowerEvent.includes("won") || lowerEvent.includes("gained") || lowerEvent.includes("found") || lowerEvent.includes("stash") || lowerEvent.includes("jackpot")
     ? "event-panel--win"
-    : "";
+    : "event-panel--neutral";
+
+  const safeInventory = inventory ?? [];
 
   return (
     <>
+      {loading && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-blue-700 rounded-full text-sm shadow-lg z-50"
+          style={{ opacity: 0.85 }}
+        >
+          {currentAction || "Confirming…"}
+        </div>
+      )}
+
       <div
-        className="min-h-screen bg-cover bg-center bg-fixed flex items-center justify-center p-4"
-        style={{ backgroundImage: `url(${backgroundUrl})` }}
+        className="min-h-screen text-white flex justify-center py-0.5 px-3 crt cyber-scanlines"
+        style={{
+          backgroundImage: `linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0.9)), url("${backgroundUrl}")`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundAttachment: "fixed",
+        }}
       >
-        <div className="w-full max-w-7xl mx-auto">
-          {/* Pre-game screen */}
+        <div className={`w-full ${isMobile ? "max-w-md" : inGame ? "max-w-5xl" : "max-w-3xl"} relative`}>
+
+          {/* Pre-login screen */}
           {!inGame && (
-            <div className="flex flex-col items-center justify-center min-h-screen text-center">
-              <h1 className="text-5xl md:text-7xl font-bold mb-16 neon-flicker">
-                DOPEWARS
-              </h1>
+            <div className="flex flex-col items-center justify-center pt-6 pb-4 animate-fadeIn">
+              <h2 className="text-4xl md:text-5xl font-bold mb-6 neon-flicker">
+                DopeWars on Base
+              </h2>
+              <p className="text-lg opacity-90 mb-10">
+                Trade. Hustle. Survive. Collect ICE.
+              </p>
+
+              <div className="relative">
+                <img
+                  src="/home.png"
+                  alt="DopeWars gameplay"
+                  className="rounded-xl shadow-2xl border border-purple-600 neon-glow-lg max-w-[900px] w-full"
+                />
+              </div>
 
               {!wallet ? (
                 <button
                   onClick={() => connect()}
-                  className="neon-button neon-button--buy px-12 py-6 text-3xl font-bold cyber-sweep shadow-2xl"
+                  className="mt-6 px-8 py-3 rounded-lg font-semibold neon-button cyber-sweep text-lg"
                 >
-                  CONNECT WALLET
+                  Connect Wallet
                 </button>
-              ) : loading ? (
-                <p className="text-3xl neon-flicker mt-12">Entering the streets...</p>
               ) : (
-                <div>
-                  <button
-                    onClick={joinGame}
-                    disabled={loading}
-                    className="neon-button neon-button--buy px-16 py-8 text-4xl font-bold cyber-sweep shadow-2xl"
-                  >
-                    {currentAction || "JOIN GAME"}
-                  </button>
-                </div>
+                <button
+                  onClick={joinGame}
+                  disabled={loading}
+                  className="mt-6 px-8 py-3 rounded-lg font-semibold neon-button neon-button--buy cyber-sweep text-xl"
+                >
+                  {currentAction || "JOIN GAME"}
+                </button>
               )}
 
               {errorMessage && (
-                <p className="text-red-400 text-xl mt-8 max-w-md">{errorMessage}</p>
+                <div className="p-2 mt-4 bg-red-600 text-center font-semibold rounded animate-fadeIn cyber-card">
+                  ⚠ {errorMessage}
+                </div>
               )}
             </div>
           )}
 
-          {/* In-game UI */}
+          {/* In-game header */}
           {inGame && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Left + Center: HUD + Inventory + Actions */}
-              <div className="lg:col-span-2 space-y-8">
-                {/* HUD */}
-                <div className="backpanel p-6 cyber-card">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-xl">
-                    <div>
-                      <span className="opacity-70">Cash:</span> ${formatMoney(cash)}
+            <h1 className="mt-10 sm:mt-4 text-center mb-6 text-2xl sm:text-3xl md:text-4xl font-bold neon-flicker neon-text-glow">
+              DopeWars on Base
+            </h1>
+          )}
+
+          {/* HUD (mobile & desktop) */}
+          {inGame && (
+            <>
+              {isMobile ? (
+                <div className="px-2 mb-3">
+                  <div className="backpanel cyber-card cyber-scanlines cyber-trace px-3 py-3 flex flex-col items-center gap-2 text-center">
+                    <p className="text-sm font-semibold opacity-90">
+                      {locationName} · Day {days} · Cash ${formatMoney(cash)}
+                    </p>
+                    <div className="flex items-center justify-center gap-2 text-xs">
+                      <span className="font-semibold">ICE: {ice}</span>
+                      <button
+                        onClick={claimDailyIce}
+                        disabled={loading}
+                        className="px-3 py-1 rounded-full text-xs font-semibold neon-button cyber-sweep"
+                      >
+                        Claim Daily ICE
+                      </button>
                     </div>
-                    <div>
-                      <span className="opacity-70">Day:</span> {days}
-                    </div>
-                    <div>
-                      <span className="opacity-70">Location:</span> {locationName}
-                    </div>
-                    <div>
-                      <span className="opacity-70">ICE:</span> {ice.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="mt-6 flex flex-wrap justify-center gap-4">
-                    <button
-                      onClick={() => setShowLeaderboard(true)}
-                      className="neon-button px-6 py-3 text-lg"
-                    >
-                      Leaderboard
-                    </button>
-                    <button
-                      onClick={claimDailyIce}
-                      disabled={loading}
-                      className="neon-button px-6 py-3 text-lg"
-                    >
-                      Claim Daily ICE
-                    </button>
                   </div>
                 </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mb-3 px-2">
+                  <div className="flex-1 p-3">
+                    <div className="backpanel cyber-card cyber-scanlines cyber-trace text-center px-2 py-2 h-[64px] flex items-center justify-center">
+                      <p className="text-sm font-semibold opacity-90">
+                        {locationName} · Day {days} · Cash ${formatMoney(cash)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="w-80 p-3">
+                    <div className="backpanel cyber-card cyber-scanlines cyber-trace text-center px-2 py-2 h-[64px] flex items-center justify-center">
+                      <div className="flex flex-col leading-tight">
+                        <p className="text-sm font-semibold opacity-90 mb-0.5">
+                          ICE: {ice}
+                        </p>
+                        <button
+                          onClick={claimDailyIce}
+                          disabled={loading}
+                          className="px-3 py-0.5 rounded text-xs font-semibold neon-button cyber-sweep"
+                        >
+                          Claim Daily ICE
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-                {/* Inventory */}
-                <div className="backpanel p-8 cyber-card">
-                  <h2 className="text-3xl font-bold text-center mb-8 neon-flicker">
-                    Inventory
-                  </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {inventory.map((drug: any, i: number) => (
-                      <div key={i} className="backpanel p-6 cyber-card inventory-card">
-                        <div className="text-2xl font-bold text-center">{drug.name}</div>
-                        <div className="text-4xl font-bold text-center my-6">
-                          {drug.amount.toLocaleString()}
-                        </div>
-                        <div className="text-center opacity-80 text-lg mb-6">
-                          ${formatMoney(drug.price)} each
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <input
-                            type="number"
-                            min="1"
-                            max={drug.amount}
-                            value={quantities[i]}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              if (val > 0 && val <= drug.amount) {
-                                const newQ = [...quantities];
-                                newQ[i] = val;
-                                setQuantities(newQ);
-                              }
-                            }}
-                            className="w-28 px-4 py-3 bg-black/60 border border-gray-500 rounded text-white text-lg"
-                          />
-                          <button
-                            onClick={() => buy(i, quantities[i])}
-                            disabled={loading || cash < drug.price * quantities[i]}
-                            className="neon-button neon-button--buy flex-1 py-3 text-lg"
-                          >
-                            Buy
-                          </button>
-                          <button
-                            onClick={() => sell(i, quantities[i])}
-                            disabled={loading || drug.amount < quantities[i]}
-                            className="neon-button neon-button--sell flex-1 py-3 text-lg"
-                          >
-                            Sell
-                          </button>
+              <div className="flex flex-col md:flex-row gap-4 items-start">
+                {/* LEFT COLUMN: Inventory & Trading */}
+                <div className="flex flex-col w-full md:flex-1 backpanel cyber-card cyber-scanlines cyber-trace pt-3 pb-3">
+                  {/* Mobile price marquee */}
+                  {isMobile && prices.length > 0 && (
+                    <div className="px-2 mb-3">
+                      <h2 className="text-lg font-bold mb-2 text-center neon-flicker">
+                        Current Drug Prices
+                      </h2>
+                      <div className="overflow-hidden relative py-0.5">
+                        <div className="flex gap-6 animate-price-marquee whitespace-nowrap">
+                          {[...Array(2)].flatMap(() =>
+                            ["Weed", "Acid", "Cocaine", "Heroin"].map((name, i) => (
+                              <div
+                                key={`${name}-${i}`}
+                                className="px-2 py-1 rounded-md text-center price-chip text-sm"
+                              >
+                                {name}: ${formatMoney(prices[i])}
+                              </div>
+                            ))
+                          )}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
 
-                  {/* Action Buttons */}
-                  <div className="flex flex-wrap justify-center gap-6 mt-10">
-                    <button
-                      onClick={endDay}
-                      disabled={loading}
-                      className="neon-button px-10 py-5 text-2xl font-bold bg-blue-600 cyber-sweep"
-                    >
+                  <h2 className="text-lg font-bold mb-3 text-center neon-flicker">
+                    Inventory &amp; Trading
+                  </h2>
+
+                  {safeInventory.length > 0 ? (
+                    <div className={`overflow-x-auto flex gap-3 px-1 ${isMobile ? "snap-x snap-mandatory inventory-grid" : "grid grid-cols-2 sm:grid-cols-2"}`}>
+                      {safeInventory.map((d, i) => {
+                        const qty = quantities[i] ?? 1;
+
+                        return (
+                          <div key={i} className={`p-1 ${isMobile ? "snap-center shrink-0 w-[65vw]" : "w-full"}`}>
+                            <div className={`backpanel cyber-card cyber-scanlines cyber-trace inventory-card flex flex-col w-full ${isMobile ? "h-auto" : "h-[198px]"}`}>
+                              <div className="font-semibold text-lg mb-1">{d.name}</div>
+
+                              <div className="grid grid-cols-2 text-sm gap-y-1 mb-2">
+                                <span className="opacity-80">Amount: {d.amount} units</span>
+                                <span className="opacity-80 text-right">Total</span>
+                                <span className="opacity-90">Price: ${formatMoney(d.price)}</span>
+                                <span className="opacity-90 text-right">${formatMoney(d.price * qty)}</span>
+                              </div>
+
+                              <input
+                                type="number"
+                                min={1}
+                                value={qty}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  if (val > 0) {
+                                    const newQ = [...quantities];
+                                    newQ[i] = val;
+                                    setQuantities(newQ);
+                                  }
+                                }}
+                                className="trade-qty"
+                                placeholder="Qty"
+                              />
+
+                              <div className="mt-auto flex gap-2">
+                                <button
+                                  onClick={() => buy(i, qty)}
+                                  disabled={loading}
+                                  className="flex-1 px-3 py-1 rounded-full text-sm font-semibold neon-button cyber-sweep neon-button--buy"
+                                >
+                                  Buy
+                                </button>
+                                <button
+                                  onClick={() => sell(i, qty)}
+                                  disabled={loading || d.amount < qty}
+                                  className={`flex-1 px-3 py-1 rounded-full text-sm font-semibold neon-button cyber-sweep ${d.amount >= qty ? "neon-button--sell" : "neon-button--disabled cursor-not-allowed"}`}
+                                >
+                                  Sell
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center opacity-60 text-sm">No inventory yet.</p>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex flex-wrap gap-3 justify-center mt-3 mb-2">
+                    <button onClick={endDay} disabled={loading} className="px-5 py-2 rounded font-semibold neon-button cyber-sweep bg-blue-600">
                       End Day
                     </button>
-                    <button
-                      onClick={hustle}
-                      disabled={loading || cash !== 0}
-                      className={`neon-button px-10 py-5 text-2xl font-bold bg-purple-700 cyber-sweep ${
-                        cash !== 0 ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                    >
+                    <button onClick={hustle} disabled={loading || cash !== 0} className={`px-5 py-2 rounded font-semibold neon-button cyber-sweep ${cash === 0 ? "bg-purple-700" : "bg-gray-700 opacity-60 cursor-not-allowed"}`}>
                       Hustle
                     </button>
-                    <button
-                      onClick={stash}
-                      disabled={loading || cash !== 0}
-                      className={`neon-button px-10 py-5 text-2xl font-bold bg-pink-600 cyber-sweep ${
-                        cash !== 0 ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                    >
+                    <button onClick={stash} disabled={loading || cash !== 0} className={`px-5 py-2 rounded font-semibold neon-button cyber-sweep ${cash === 0 ? "bg-pink-600" : "bg-gray-700 opacity-60 cursor-not-allowed"}`}>
                       Stash
                     </button>
-                    <button
-                      onClick={restartGame}
-                      disabled={loading || days < 5}
-                      className={`neon-button px-10 py-5 text-2xl font-bold border-2 border-white cyber-sweep ${
-                        days < 5 ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                    >
+                    <button onClick={restartGame} disabled={loading || days < 5} className={`px-5 py-2 rounded font-semibold neon-button cyber-sweep ${days >= 5 ? "bg-gray-800 border border-white" : "bg-gray-700 opacity-60 cursor-not-allowed"}`}>
                       Restart
                     </button>
                   </div>
-                  {days < 5 && (
-                    <p className="text-center mt-4 opacity-60">
-                      Restart available on Day 5+
-                    </p>
+                  {days < 5 && <p className="text-center opacity-60 text-xs mb-2 neon-flicker">Restart becomes available at Day 5+</p>}
+                </div>
+
+                {/* RIGHT COLUMN */}
+                <div className="flex flex-col gap-2 w-full md:w-80">
+                  <div className={`p-4 backpanel cyber-card cyber-scanlines cyber-trace event-panel ${eventPanelClass}`}>
+                    <h2 className="text-lg font-bold mb-1 text-center neon-flicker">Last Event</h2>
+                    <div className={`text-center opacity-90 ${eventColor}`}>
+                      {lastEvent || "No events yet"}
+                    </div>
+                  </div>
+
+                  {/* Desktop prices */}
+                  {!isMobile && prices.length > 0 && (
+                    <div className="p-4 backpanel cyber-card cyber-scanlines cyber-trace">
+                      <h2 className="text-lg font-bold mb-2 text-center neon-flicker">Current Drug Prices</h2>
+                      <ul className="list-disc list-inside space-y-1 text-sm">
+                        <li>Weed: ${formatMoney(prices[0])}</li>
+                        <li>Acid: ${formatMoney(prices[1])}</li>
+                        <li>Cocaine: ${formatMoney(prices[2])}</li>
+                        <li>Heroin: ${formatMoney(prices[3])}</li>
+                      </ul>
+                    </div>
                   )}
-                </div>
-              </div>
 
-              {/* Right Column */}
-              <div className="space-y-8">
-                {/* Last Event */}
-                <div className={`backpanel p-6 cyber-card event-panel ${eventPanelClass}`}>
-                  <h2 className="text-2xl font-bold text-center mb-4 neon-flicker">
-                    Last Event
-                  </h2>
-                  <p className={`text-center text-lg ${eventColor}`}>
-                    {lastEvent || "No events yet"}
-                  </p>
-                </div>
-
-                {/* Current Prices */}
-                {prices.length > 0 && (
-                  <div className="backpanel p-6 cyber-card">
-                    <h2 className="text-2xl font-bold text-center mb-6 neon-flicker">
-                      Current Drug Prices
-                    </h2>
-                    <ul className="space-y-3 text-xl">
-                      <li>Weed: ${formatMoney(prices[0])}</li>
-                      <li>Acid: ${formatMoney(prices[1])}</li>
-                      <li>Cocaine: ${formatMoney(prices[2])}</li>
-                      <li>Heroin: ${formatMoney(prices[3])}</li>
-                    </ul>
-                  </div>
-                )}
-
-                {/* Travel */}
-                <div className="backpanel p-6 cyber-card">
-                  <h2 className="text-2xl font-bold text-center mb-4 neon-flicker">
-                    Travel
-                  </h2>
-                  <p className="text-center opacity-80 mb-6">
-                    Costs $100 · Does not consume a day
-                  </p>
-                  <div className="grid grid-cols-2 gap-4">
-                    {CITY_NAMES.map((city, i) => (
-                      <button
-                        key={i}
-                        onClick={() => travelTo(i)}
-                        disabled={loading || cash < 100 || locIndex === i}
-                        className="neon-button py-4 rounded-full text-lg font-medium cyber-sweep"
-                      >
-                        {city}
-                      </button>
-                    ))}
+                  {/* Travel */}
+                  <div className="p-4 backpanel cyber-card cyber-scanlines cyber-trace">
+                    <h2 className="text-lg font-bold mb-2 text-center neon-flicker">Travel</h2>
+                    <div className="text-xs opacity-80 mb-2 text-center">Traveling consumes 1 day.</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-2">
+                      {CITY_NAMES.map((city, i) => (
+                        <button
+                          key={i}
+                          disabled={loading}
+                          onClick={() => {
+                            travelTo(i);
+                            endDay(); // restored original behavior
+                          }}
+                          className={`rounded-full neon-button cyber-sweep py-2 text-sm text-center ${isMobile ? "w-full" : "px-4"}`}
+                          style={isMobile ? { minWidth: "120px" } : {}}
+                        >
+                          {city}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
 
-      <EventPopup
-        visible={showPopup}
-        image={popupImage}
-        text={popupText}
-        onClose={() => setShowPopup(false)}
-      />
-      {showLeaderboard && (
-        <LeaderboardModal onClose={() => setShowLeaderboard(false)} />
-      )}
+      <EventPopup visible={showPopup} image={popupImage} text={popupText} onClose={() => setShowPopup(false)} />
+      {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
     </>
   );
 }
