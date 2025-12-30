@@ -1,14 +1,16 @@
-// src/hooks/useGame.ts
+// src/hooks/useGame.ts (FULL FILE - REPLACE ENTIRELY)
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { SmartAccount, AAWrapProvider, SendTransactionMode } from "@particle-network/aa";
 import { createSmartAccount } from "../smartAccount";
+import { buildSessionPermissions, getSessionExpiry } from "../sessionKeys"; // ← NEW IMPORT
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../config";
 
 export function useGame() {
   const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
   const [wallet, setWallet] = useState<string | null>(null);
   const [aaSigner, setAaSigner] = useState<any>(null);
+  const [sessionSigner, setSessionSigner] = useState<any>(null); // ← NEW: for silent actions
   const [readContract, setReadContract] = useState<any>(null);
 
   const [playerData, setPlayerData] = useState<any>(null);
@@ -88,14 +90,13 @@ export function useGame() {
       }
     } catch (err) {
       console.warn("Partial refresh failure — will retry via fallback", err);
-      // Keep last known good state
     }
   }
 
   async function connectWallet(particleProvider: any) {
     if (!particleProvider) return;
 
-    if (wallet || loading) return; // Prevent double init
+    if (wallet || loading) return;
 
     try {
       setLoading(true);
@@ -116,6 +117,31 @@ export function useGame() {
       setWallet(address);
       setAaSigner(signer);
 
+      // ← NEW: Create session key after first connect (one signature)
+      try {
+        const permissions = buildSessionPermissions();
+        const expiry = getSessionExpiry();
+
+        // This triggers one signature popup to approve session
+        const sessionData = await sa.createSession(permissions, expiry);
+
+        // Create signer from session private key
+        const sessionPrivateKey = sessionData.privateKey;
+        const sessionWallet = new ethers.Wallet(sessionPrivateKey);
+
+        // Wrap session signer with AA provider for UserOp handling
+        const sessionAaProvider = new ethers.BrowserProvider(
+          new AAWrapProvider(sa, SendTransactionMode.Gasless, sessionWallet)
+        );
+        const sessionKeySigner = await sessionAaProvider.getSigner();
+
+        setSessionSigner(sessionKeySigner);
+        console.log("🎉 Session key created — silent actions ready!");
+      } catch (sessionErr) {
+        console.warn("Session key creation failed — falling back to normal signer", sessionErr);
+        // Not fatal — app still works with normal popups
+      }
+
       await refreshGameState(address);
     } catch (err: any) {
       console.error("connectWallet error:", err);
@@ -125,7 +151,6 @@ export function useGame() {
     }
   }
 
-  // Initial refresh when wallet becomes available
   useEffect(() => {
     if (wallet && readContract) {
       refreshGameState(wallet);
@@ -133,7 +158,8 @@ export function useGame() {
   }, [wallet, readContract]);
 
   async function sendTx(label: string, fnName: string, args: any[] = []) {
-    if (!aaSigner || !wallet) {
+    const signerToUse = sessionSigner || aaSigner; // Prefer session (silent)
+    if (!signerToUse || !wallet) {
       showError("Wallet not connected");
       return;
     }
@@ -142,11 +168,10 @@ export function useGame() {
     setLoading(true);
 
     try {
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, aaSigner);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signerToUse);
       const tx = await contract[fnName](...args);
       await tx.wait();
 
-      // Primary refresh
       await refreshGameState(wallet);
     } catch (err: any) {
       let message = "Transaction failed";
@@ -161,7 +186,6 @@ export function useGame() {
       setLoading(false);
       setCurrentAction(null);
 
-      // Fallback refresh — ensures UI never stays stale
       setTimeout(() => {
         if (wallet && readContract) {
           refreshGameState(wallet);
@@ -174,6 +198,7 @@ export function useGame() {
     setWallet(null);
     setSmartAccount(null);
     setAaSigner(null);
+    setSessionSigner(null);
     setReadContract(null);
     setPlayerData(null);
     setInventory([]);

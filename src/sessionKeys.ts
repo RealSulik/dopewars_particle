@@ -1,24 +1,21 @@
 // src/sessionKeys.ts
 import { ethers } from "ethers";
 
-// This uses Particle's built-in session key support via custom RPC
-export async function getSessionSigner(aaProvider: ethers.Provider, smartAccountAddress: string) {
-  // Request session key creation (24-hour expiry, allow all calls to your contract)
-  const sessionParams = {
-    expiry: Math.floor(Date.now() / 1000) + 24 * 3600, // 24 hours
-    permissions: [
-      {
-        target: "0x9d154415f03Ba5389d703d381F2D8A0ea57bb6B8", // your contract
-        methods: ["*"], // allow all functions
-      },
-    ],
-  };
+// Helper to build session permissions for your contract only
+export function buildSessionPermissions() {
+  return [
+    {
+      // Your DopeWars contract address
+      target: "0x9d154415f03Ba5389d703d381F2D8A0ea57bb6B8",
+      // Allow all functions on it
+      methods: ["*"],
+      // Optional: limit value per tx (e.g., prevent draining if key compromised)
+      // valueLimit: ethers.parseEther("0.1"), // uncomment if you want
+    },
+  ];
+}
 
-  // Particle's custom RPC for session keys
-  const sessionKey = await aaProvider.send("aa_createSession", [sessionParams]);
-
-  // Create signer from session key
-  const sessionSigner = new ethers.Wallet(sessionKey.privateKey);
-
-  return sessionSigner;
+// Expiry: 24 hours from now
+export function getSessionExpiry() {
+  return Math.floor(Date.now() / 1000) + 24 * 3600;
 }
