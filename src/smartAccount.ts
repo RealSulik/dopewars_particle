@@ -13,7 +13,8 @@ export async function createSmartAccount(provider: any): Promise<SmartAccount> {
     ...config,
     aaOptions: {
       accountContracts: {
-        SIMPLE: [{ chainIds: [Base.id], version: "1.0.0" }],
+        // Switch to BICONOMY v2.0.0 for session key support
+        BICONOMY: [{ chainIds: [Base.id], version: "2.0.0" }],
       },
     },
   });

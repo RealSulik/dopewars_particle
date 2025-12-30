@@ -1,16 +1,16 @@
-// src/hooks/useGame.ts (FULL FILE - REPLACE ENTIRELY)
+// src/hooks/useGame.ts (FULL FILE WITH DEBUG LOGS)
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { SmartAccount, AAWrapProvider, SendTransactionMode } from "@particle-network/aa";
 import { createSmartAccount } from "../smartAccount";
-import { buildSessionPermissions, getSessionExpiry } from "../sessionKeys"; // ← NEW IMPORT
+import { buildSessionPermissions, getSessionExpiry } from "../sessionKeys";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../config";
 
 export function useGame() {
   const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
   const [wallet, setWallet] = useState<string | null>(null);
   const [aaSigner, setAaSigner] = useState<any>(null);
-  const [sessionSigner, setSessionSigner] = useState<any>(null); // ← NEW: for silent actions
+  const [sessionSigner, setSessionSigner] = useState<any>(null);
   const [readContract, setReadContract] = useState<any>(null);
 
   const [playerData, setPlayerData] = useState<any>(null);
@@ -79,15 +79,11 @@ export function useGame() {
 
       try {
         setIce(Number(await readContract.s_totalIce(address)));
-      } catch {
-        // silent
-      }
+      } catch {}
 
       try {
         setLastDailyClaim(Number(await readContract.s_lastDailyIceClaim(address)));
-      } catch {
-        // silent
-      }
+      } catch {}
     } catch (err) {
       console.warn("Partial refresh failure — will retry via fallback", err);
     }
@@ -117,29 +113,35 @@ export function useGame() {
       setWallet(address);
       setAaSigner(signer);
 
-      // ← NEW: Create session key after first connect (one signature)
+      console.log("🔑 Normal AA signer ready");
+
+      // ← DEBUG: Attempt session key creation
       try {
+        console.log("🕐 Attempting to create session key...");
+
         const permissions = buildSessionPermissions();
         const expiry = getSessionExpiry();
 
-        // This triggers one signature popup to approve session
+        console.log("Session permissions:", permissions);
+        console.log("Session expiry:", new Date(expiry * 1000).toLocaleString());
+
         const sessionData = await sa.createSession(permissions, expiry);
 
-        // Create signer from session private key
+        console.log("✅ Session key created successfully:", sessionData);
+
         const sessionPrivateKey = sessionData.privateKey;
         const sessionWallet = new ethers.Wallet(sessionPrivateKey);
 
-        // Wrap session signer with AA provider for UserOp handling
         const sessionAaProvider = new ethers.BrowserProvider(
           new AAWrapProvider(sa, SendTransactionMode.Gasless, sessionWallet)
         );
         const sessionKeySigner = await sessionAaProvider.getSigner();
 
         setSessionSigner(sessionKeySigner);
-        console.log("🎉 Session key created — silent actions ready!");
+        console.log("🎉 Session signer ready — silent mode activated!");
       } catch (sessionErr) {
-        console.warn("Session key creation failed — falling back to normal signer", sessionErr);
-        // Not fatal — app still works with normal popups
+        console.error("❌ Session key creation FAILED:", sessionErr);
+        console.warn("Falling back to normal signer (will prompt every time)");
       }
 
       await refreshGameState(address);
@@ -158,7 +160,11 @@ export function useGame() {
   }, [wallet, readContract]);
 
   async function sendTx(label: string, fnName: string, args: any[] = []) {
-    const signerToUse = sessionSigner || aaSigner; // Prefer session (silent)
+    const signerToUse = sessionSigner || aaSigner;
+
+    console.log("🛠 Sending transaction:", label);
+    console.log("Using signer:", sessionSigner ? "SESSION (should be silent)" : "NORMAL (will prompt)");
+
     if (!signerToUse || !wallet) {
       showError("Wallet not connected");
       return;
@@ -170,7 +176,9 @@ export function useGame() {
     try {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signerToUse);
       const tx = await contract[fnName](...args);
+      console.log("Transaction sent, waiting for confirmation...");
       await tx.wait();
+      console.log("Transaction confirmed!");
 
       await refreshGameState(wallet);
     } catch (err: any) {
